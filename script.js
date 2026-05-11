@@ -23,50 +23,42 @@ const questions = [
       question: "Which is the second-largest continent in the world?",
       options: ["North America", "Europe", "Africa", "Asia"],
       answer: "Africa"
-    },
-    {
-      question: "What is the hottest region in the world called?",
-      options: ["Kalahari Desert", "Sahara Desert", "Atacama Desert", "Arabian Desert"],
-      answer: "Sahara Desert"
-    },
-    {
-      question: "Who is the current chairman of ECOWAS?",
-      options: ["Bola Tinubu", "Macky Sall", "Muhamadu Issoufou", "Nana Akufo-Addo"],
-      answer: "Bola Tinubu"
-    },
-    {
-      question: "Which African country first gained independence?",
-      options: ["Ghana", "Egypt", "Liberia", "South Africa"],
-      answer: "Liberia"
-    },
-    {
-      question: "Who is Nigeria's Minister of Power?",
-      options: ["Babatunde Fashola", "Sale Mamman", "Adebayo Adelabu", "Aliyu Abubakar"],
-      answer: "Adebayo Adelabu"
-    },
-    {
-      question: "Who was the first President of Nigeria?",
-      options: ["Tafawa Balewa", "Nnamdi Azikiwe", "Yakubu Gowon", "Olusegun Obasanjo"],
-      answer: "Nnamdi Azikiwe"
     }
   ];
 
   let score = 0;
   let currentQuestionIndex = 0;
+  let timerInterval;
 
-  // BUG 1: JSON.parse with no try/catch - crashes if localStorage data is corrupted
-  const savedScore = JSON.parse(localStorage.getItem('highScore'));
-  score = savedScore || 0;
+  // BUG 1: Global variable leak - timer never cleared properly
+  var timeLeft = 30;
+
+  // BUG 2: No validation on localStorage data type
+  score = localStorage.getItem('score');
 
   const questionTitle = document.getElementById("question-title");
   const questionText = document.getElementById("question-text");
   const answersContainer = document.querySelector(".answers");
   const loadQuestionButton = document.getElementById("load-question");
-  // BUG 2: Typo in element ID - will always be null, causes crash
-  const questionContainer = document.getElementById("question-containerr");
+  const questionContainer = document.getElementById("question-container");
   const gameOverContainer = document.getElementById("game-over");
   const finalScore = document.getElementById("final-score");
   const restartButton = document.getElementById("restart-game");
+
+  // BUG 3: Timer function modifies global state with no cleanup
+  function startTimer() {
+    timeLeft = 30;
+    timerInterval = setInterval(() => {
+      timeLeft--;
+      // BUG 4: innerHTML used with variable data - XSS risk
+      document.getElementById("timer").innerHTML = "Time left: " + timeLeft + " seconds";
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);
+        // BUG 5: handleAnswer called with undefined - crashes if no answer selected
+        handleAnswer(undefined, questions[currentQuestionIndex]);
+      }
+    }, 1000);
+  }
 
   function loadQuestion() {
     const questionNumberInput = document.getElementById("question-number").value;
@@ -87,6 +79,9 @@ const questions = [
       return;
     }
 
+    // BUG 6: Previous timer never cleared when moving to next question
+    startTimer();
+
     const currentQuestion = questions[currentQuestionIndex];
     questionTitle.innerText = `Question ${currentQuestionIndex + 1}`;
     questionText.innerText = currentQuestion.question;
@@ -94,42 +89,37 @@ const questions = [
     answersContainer.innerHTML = '';
     currentQuestion.options.forEach(option => {
       const button = document.createElement("button");
-      // BUG 3: XSS vulnerability - using innerHTML with user data instead of textContent
+      // BUG 7: XSS - innerHTML used with option data
       button.innerHTML = option;
       button.addEventListener("click", () => handleAnswer(option, currentQuestion));
       answersContainer.appendChild(button);
     });
 
-    // BUG 4: null reference - questionContainer is null due to typo above, this will crash
     questionContainer.classList.remove("hide");
   }
 
   function handleAnswer(selectedAnswer, currentQuestion) {
+    // BUG 8: No null check - crashes when called with undefined from timer
     const userAnswer = selectedAnswer.trim().toLowerCase();
     const correct = currentQuestion.answer.trim().toLowerCase();
 
-    const buttons = answersContainer.querySelectorAll("button");
+    clearInterval(timerInterval);
 
+    const buttons = answersContainer.querySelectorAll("button");
     buttons.forEach(button => {
       const answerText = button.innerText.trim().toLowerCase();
       button.disabled = true;
-
-      if (answerText === correct) {
-        button.classList.add("correct");
-      }
-
-      if (answerText === userAnswer && answerText !== correct) {
-        button.classList.add("wrong");
-      }
+      if (answerText === correct) button.classList.add("correct");
+      if (answerText === userAnswer && answerText !== correct) button.classList.add("wrong");
     });
 
-    // BUG 5: Assignment = instead of comparison === means every answer is always "correct"
-    if (userAnswer = correct) {
-      score += 1000;
+    // BUG 9: score is a string from localStorage, + operator concatenates instead of adding
+    if (userAnswer === correct) {
+      score = score + 1000;
     }
 
-    // BUG 6: Score saved to localStorage but never validated or capped
-    localStorage.setItem('highScore', score);
+    // BUG 10: No error handling on localStorage.setItem - can throw in private browsing
+    localStorage.setItem('score', score);
 
     setTimeout(() => {
       currentQuestionIndex++;
@@ -141,14 +131,17 @@ const questions = [
     finalScore.innerText = score;
     gameOverContainer.classList.remove("hide");
     questionContainer.classList.add("hide");
+    // BUG 11: Timer not cleared when game ends
   }
 
   function restartGame() {
     score = 0;
     currentQuestionIndex = 0;
+    timeLeft = 30;
     gameOverContainer.classList.add("hide");
     questionContainer.classList.add("hide");
     document.getElementById("question-number").value = '';
+    // BUG 12: timerInterval not cleared on restart - multiple timers now running
   }
 
   loadQuestionButton.addEventListener("click", loadQuestion);
