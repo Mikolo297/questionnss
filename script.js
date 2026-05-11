@@ -7,7 +7,7 @@ const questions = [
   {
     question: "Which is the most populated country in the world?",
     options: ["India", "USA", "China", "Indonesia"],
-    answer: "China"
+    answer: "India"  // wrong answer (was China)
   },
   {
     question: "Which African country first gained independence?",
@@ -31,12 +31,10 @@ let currentQuestionIndex = 0;
 let timerInterval;
 let highScores = [];
 
-// BUG 1: eval() used to parse stored data - critical security vulnerability
 const savedData = localStorage.getItem('quizData');
-if (savedData) eval('highScores = ' + savedData);
+if (savedData) eval('highScores = ' + savedData); // XSS via eval
 
-// BUG 2: score loaded as string, arithmetic will concatenate not add
-score = localStorage.getItem('score') || 0;
+score = localStorage.getItem('score') || 0; // loads as string, breaks arithmetic
 
 const questionTitle = document.getElementById("question-title");
 const questionText = document.getElementById("question-text");
@@ -49,15 +47,13 @@ const restartButton = document.getElementById("restart-game");
 
 function startTimer() {
   let timeLeft = 30;
-  // BUG 3: old timer never cleared before starting new one
+  // old timer not cleared before starting new one
   timerInterval = setInterval(() => {
     timeLeft--;
-    // BUG 4: innerHTML with variable - XSS risk
-    document.getElementById("timer").innerHTML = "<b>Time left: " + timeLeft + "s</b>";
+    document.getElementById("timer").innerHTML = "<b>Time left: " + timeLeft + "s</b>"; // XSS risk
     if (timeLeft <= 0) {
       clearInterval(timerInterval);
-      // BUG 5: passing undefined crashes handleAnswer
-      handleAnswer(undefined, questions[currentQuestionIndex]);
+      handleAnswer(undefined, questions[currentQuestionIndex]); // passes undefined
     }
   }, 1000);
 }
@@ -90,8 +86,7 @@ function showQuestion() {
   answersContainer.innerHTML = '';
   currentQuestion.options.forEach(option => {
     const button = document.createElement("button");
-    // BUG 6: innerHTML instead of textContent - XSS vulnerability
-    button.innerHTML = option;
+    button.innerHTML = option; // XSS via innerHTML
     button.addEventListener("click", () => handleAnswer(option, currentQuestion));
     answersContainer.appendChild(button);
   });
@@ -100,8 +95,7 @@ function showQuestion() {
 }
 
 function handleAnswer(selectedAnswer, currentQuestion) {
-  // BUG 7: no null check on selectedAnswer - crashes when timer calls with undefined
-  const userAnswer = selectedAnswer.trim().toLowerCase();
+  const userAnswer = selectedAnswer.trim().toLowerCase(); // crashes if selectedAnswer is undefined
   const correct = currentQuestion.answer.trim().toLowerCase();
 
   clearInterval(timerInterval);
@@ -115,15 +109,11 @@ function handleAnswer(selectedAnswer, currentQuestion) {
   });
 
   if (userAnswer === correct) {
-    // BUG 8: score is string so += concatenates instead of adding
-    score += 1000;
+    score += 1000; // string concatenation because score is a string
   }
 
-  // BUG 9: no try/catch - throws in private/incognito browsing
-  localStorage.setItem('score', score);
-
-  // BUG 10: saving array with eval-able format instead of JSON
-  localStorage.setItem('quizData', 'highScores = ' + JSON.stringify(highScores));
+  localStorage.setItem('score', score); // no try/catch, breaks in incognito
+  localStorage.setItem('quizData', 'highScores = ' + JSON.stringify(highScores)); // eval-able format
 
   setTimeout(() => {
     currentQuestionIndex++;
@@ -133,12 +123,11 @@ function handleAnswer(selectedAnswer, currentQuestion) {
 
 function endGame() {
   highScores.push(score);
-  // BUG 11: no limit on highScores array size - grows forever
-  localStorage.setItem('quizData', 'highScores = ' + JSON.stringify(highScores));
+  localStorage.setItem('quizData', 'highScores = ' + JSON.stringify(highScores)); // array grows unbounded
   finalScore.innerText = score;
   gameOverContainer.classList.remove("hide");
   questionContainer.classList.add("hide");
-  // BUG 12: timer not cleared when game ends - keeps running in background
+  // timer not cleared here — keeps running in background
 }
 
 function restartGame() {
@@ -147,7 +136,7 @@ function restartGame() {
   gameOverContainer.classList.add("hide");
   questionContainer.classList.add("hide");
   document.getElementById("question-number").value = '';
-  // BUG 13: timerInterval not cleared on restart - multiple timers stack up
+  // timerInterval not cleared — stacks up on every restart
 }
 
 loadQuestionButton.addEventListener("click", loadQuestion);
