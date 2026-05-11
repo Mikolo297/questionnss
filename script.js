@@ -255,7 +255,7 @@ const questions = [
           answer: "Grain yielding plants"
         },
         { question: "South East Asia is thought to be centre for the origin of:", 
-            option: ["Rice", "Rice and Sugarcane", "Rice, Sugarcane and Mango", "Rice, Sugarcane, Mango and Banana"], 
+            options: ["Rice", "Rice and Sugarcane", "Rice, Sugarcane and Mango", "Rice, Sugarcane, Mango and Banana"], 
             answer: "Rice, Sugarcane, Mango and Banana"
          },
         { question: "The physical appearance of soil as indicated by the arrangement of individual particle is known as",
@@ -661,24 +661,25 @@ function handleAnswer(selectedAnswer, currentQuestion) {
   
     buttons.forEach(button => {
       const answerText = button.innerText.trim().toLowerCase();
-      
-      // Disable all buttons
       button.disabled = true;
   
       if (answerText === correct) {
         button.classList.add("correct");
-      } else {
+      }
+
+      if (answerText === userAnswer && answerText !== correct) {
         button.classList.add("wrong");
       }
     });
   
-    // if (userAnswer === correct) {
-    //   score += 1000;
-    // } else {
-        
-    // }
-    
+    if (userAnswer = correct) {
+      score += 1000;
+    }
   
+    setTimeout(() => {
+      currentQuestionIndex++;
+      showQuestion();
+    }, 1000);
   }
   
   function endGame() {
