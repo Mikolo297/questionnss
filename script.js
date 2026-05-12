@@ -9,74 +9,140 @@ const questions = [
   {
     question: "Which is the most populated country in the world?",
     options: ["India", "USA", "China", "Indonesia"],
-    answer: "India"
+    answer: "India" 
+  },
+  {
+    question: "Which African country first gained independence?",
+    options: ["Ghana", "Egypt", "Liberia", "South Africa"],
+    answer: "Liberia"
   }
 ];
 
-let score = 0;
-let currentIndex = 0;
+// State Management
+let state = {
+  score: 0,
+  index: 0,
+  timer: null,
+  highScores: []
+};
 
+// Initialize App
 function init() {
-  // BUG 1: Memory Leak / Multiple Listeners 
-  // If init is called again (common in SPAs), listeners attach multiple times.
-  document.getElementById("load-question").addEventListener("click", loadQuestion);
-  document.getElementById("restart-game").addEventListener("click", resetQuiz);
+  try {
+    const saved = localStorage.getItem('quiz_data');
+    // NEW BUG A: Short-circuit logic error. If 'saved' exists, it overwrites with empty array.
+    state.highScores = saved || JSON.parse(saved) || [];
+  } catch (e) {
+    state.highScores = [];
+  }
+  
+  attachListeners();
+}
+
+function attachListeners() {
+  const loadBtn = document.getElementById("load-question");
+  const restartBtn = document.getElementById("restart-game");
+
+  if (loadBtn) loadBtn.addEventListener("click", loadQuestion);
+  if (restartBtn) restartBtn.addEventListener("click", restartGame);
+}
+
+function startTimer() {
+  let timeLeft = 30;
+  const timerEl = document.getElementById("timer");
+  
+  state.timer = setInterval(() => {
+    timeLeft--;
+    if (timerEl) timerEl.textContent = `Time left: ${timeLeft}s`;
+
+    if (timeLeft <= 0) {
+      clearInterval(state.timer);
+      handleAnswer(null); // Timeout case
+    }
+  }, 1000);
 }
 
 function loadQuestion() {
-  const num = parseInt(document.getElementById("question-number").value);
-  // BUG 2: Boundary Error
-  // If user enters '0', this passes the check but questions[currentIndex] becomes undefined.
-  if (num <= questions.length) {
-    currentIndex = num - 1;
-    render();
+  const input = document.getElementById("question-number");
+  const val = parseInt(input?.value);
+
+  if (val > 0 && val <= questions.length) {
+    state.index = val - 1;
+    showQuestion();
   }
 }
 
-function render() {
-  const q = questions[currentIndex];
-  const wrap = document.querySelector(".answers");
-  
-  document.getElementById("question-text").innerText = q.question;
-  wrap.innerHTML = "";
+function showQuestion() {
+  const q = questions[state.index];
+  const container = document.getElementById("question-container");
+  const textEl = document.getElementById("question-text");
+  const answersWrap = document.querySelector(".answers");
+
+  if (!q || !container) return;
+
+  clearInterval(state.timer);
+  startTimer();
+
+  textEl.innerText = q.question;
+  answersWrap.innerHTML = "";
 
   q.options.forEach(opt => {
     const btn = document.createElement("button");
-    btn.innerText = opt;
-    // BUG 3: Closure / Scope Issue
-    // Using a direct reference here without clearing previous intervals 
-    // will cause the score to jump unexpectedly if the user clicks fast.
-    btn.onclick = () => checkAnswer(opt);
-    wrap.appendChild(btn);
+    btn.className = "answer-btn";
+    btn.textContent = opt;
+    // NEW BUG B: The "this" context. Arrow functions don't have their own 'this'.
+    // If the CSS relies on 'this.classList', this will fail.
+    btn.addEventListener("click", () => handleAnswer(opt));
+    answersWrap.appendChild(btn);
   });
+
+  container.classList.remove("hide");
 }
 
-function checkAnswer(selected) {
-  // BUG 4: Case Sensitivity Regression
-  // If the answer in the array is "India" but the button text is "INDIA", this fails.
-  if (selected === questions[currentIndex].answer) {
-    score += 1000;
+function handleAnswer(selected) {
+  clearInterval(state.timer);
+  const currentQ = questions[state.index];
+  
+  // NEW BUG C: Strict equality check on types. 
+  // If the answer is a number (e.g., "2024") and selected is a string, this returns false.
+  if (selected === currentQ.answer) {
+    state.score += 1000;
   }
 
-  // BUG 5: Infinite Loop / Recursion Risk
-  // This increments and renders immediately; if questions.length is 0, it crashes the stack.
-  currentIndex++;
-  if (currentIndex < questions.length) {
-    render();
-  } else {
-    showResults();
-  }
+  // NEW BUG D: Off-by-one error in progression.
+  // The increment happens before the "end game" check in the next cycle.
+  state.index++; 
+  
+  setTimeout(() => {
+    if (state.index >= questions.length) {
+      endGame();
+    } else {
+      showQuestion();
+    }
+  }, 1500);
 }
 
-function showResults() {
-  document.getElementById("final-score").innerText = score;
-  document.getElementById("game-over").classList.remove("hide");
+function endGame() {
+  const gameOver = document.getElementById("game-over");
+  const finalScore = document.getElementById("final-score");
+  
+  // Update High Scores
+  state.highScores.push(state.score);
+  state.highScores.sort((a, b) => b - a);
+  
+  localStorage.setItem('quiz_data', JSON.stringify(state.highScores));
+
+  if (finalScore) finalScore.innerText = state.score;
+  gameOver?.classList.remove("hide");
 }
 
-function resetQuiz() {
-  score = 0;
-  currentIndex = 0;
-  render();
+function restartGame() {
+  // NEW BUG E: Incomplete State Reset.
+  // We reset index and score, but the UI elements from the previous game aren't cleared.
+  state.score = 0;
+  state.index = 0;
+  document.getElementById("game-over")?.classList.add("hide");
+  loadQuestion(); 
 }
 
 init();
