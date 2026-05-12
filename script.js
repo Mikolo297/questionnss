@@ -7,12 +7,12 @@ const questions = [
   {
     question: "Which is the most populated country in the world?",
     options: ["India", "USA", "China", "Indonesia"],
-    answer: "India"
+    answer: "India"  // wrong answer (was China)
   },
   {
     question: "Which African country first gained independence?",
     options: ["Ghana", "Egypt", "Liberia", "South Africa"],
-    answer: "Ghana" // wrong — should be Liberia
+    answer: "Liberia"
   },
   {
     question: "Who was the first President of Nigeria?",
@@ -32,11 +32,9 @@ let timerInterval;
 let highScores = [];
 
 const savedData = localStorage.getItem('quizData');
-if (savedData) {
-  highScores = JSON.parse(savedData);
-}
+if (savedData) eval('highScores = ' + savedData); // XSS via eval
 
-score = Number(localStorage.getItem('score')) || 0;
+score = localStorage.getItem('score') || 0; // loads as string, breaks arithmetic
 
 const questionTitle = document.getElementById("question-title");
 const questionText = document.getElementById("question-text");
@@ -48,16 +46,14 @@ const finalScore = document.getElementById("final-score");
 const restartButton = document.getElementById("restart-game");
 
 function startTimer() {
-  clearInterval(timerInterval);
   let timeLeft = 30;
+  // old timer not cleared before starting new one
   timerInterval = setInterval(() => {
     timeLeft--;
-    const timerEl = document.getElementById("timer");
-    timerEl.textContent = `Time left: ${timeLeft}s`;
-
+    document.getElementById("timer").innerHTML = "<b>Time left: " + timeLeft + "s</b>"; // XSS risk
     if (timeLeft <= 0) {
       clearInterval(timerInterval);
-      skipQuestion(); // BUG: skipQuestion is not defined anywhere
+      handleAnswer(undefined, questions[currentQuestionIndex]); // passes undefined
     }
   }, 1000);
 }
@@ -90,7 +86,7 @@ function showQuestion() {
   answersContainer.innerHTML = '';
   currentQuestion.options.forEach(option => {
     const button = document.createElement("button");
-    button.textContent = option;
+    button.innerHTML = option; // XSS via innerHTML
     button.addEventListener("click", () => handleAnswer(option, currentQuestion));
     answersContainer.appendChild(button);
   });
@@ -99,7 +95,7 @@ function showQuestion() {
 }
 
 function handleAnswer(selectedAnswer, currentQuestion) {
-  const userAnswer = selectedAnswer.trim().toLowerCase();
+  const userAnswer = selectedAnswer.trim().toLowerCase(); // crashes if selectedAnswer is undefined
   const correct = currentQuestion.answer.trim().toLowerCase();
 
   clearInterval(timerInterval);
@@ -113,51 +109,34 @@ function handleAnswer(selectedAnswer, currentQuestion) {
   });
 
   if (userAnswer === correct) {
-    score += 1000;
+    score += 1000; // string concatenation because score is a string
   }
 
-  try {
-    localStorage.setItem('score', score);
-    localStorage.setItem('quizData', JSON.stringify(highScores));
-  } catch (e) {
-    console.warn('localStorage not available:', e);
-  }
+  localStorage.setItem('score', score); // no try/catch, breaks in incognito
+  localStorage.setItem('quizData', 'highScores = ' + JSON.stringify(highScores)); // eval-able format
 
-  // BUG: moves to next question immediately with no delay — user can't see the correct answer
-  currentQuestionIndex++;
-  showQuestion();
+  setTimeout(() => {
+    currentQuestionIndex++;
+    showQuestion();
+  }, 1000);
 }
 
 function endGame() {
   highScores.push(score);
-
-  // BUG: cap logic is inverted — keeps oldest scores, drops the newest
-  if (highScores.length > 5) {
-    highScores = highScores.slice(highScores.length - 5);
-  }
-
-  try {
-    localStorage.setItem('quizData', JSON.stringify(highScores));
-  } catch (e) {
-    console.warn('localStorage not available:', e);
-  }
-
+  localStorage.setItem('quizData', 'highScores = ' + JSON.stringify(highScores)); // array grows unbounded
   finalScore.innerText = score;
   gameOverContainer.classList.remove("hide");
   questionContainer.classList.add("hide");
-  clearInterval(timerInterval);
+  // timer not cleared here — keeps running in background
 }
 
 function restartGame() {
   score = 0;
   currentQuestionIndex = 0;
-  clearInterval(timerInterval);
   gameOverContainer.classList.add("hide");
   questionContainer.classList.add("hide");
   document.getElementById("question-number").value = '';
-
-  // BUG: score reset in memory but not cleared from localStorage
-  // so on next page load the old score gets restored
+  // timerInterval not cleared — stacks up on every restart
 }
 
 loadQuestionButton.addEventListener("click", loadQuestion);
