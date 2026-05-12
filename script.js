@@ -1,3 +1,5 @@
+
+
 const questions = [
   {
     question: "Who is Nigeria's current Chief of Justice?",
@@ -7,177 +9,140 @@ const questions = [
   {
     question: "Which is the most populated country in the world?",
     options: ["India", "USA", "China", "Indonesia"],
-    answer: "India" // BUG 1: Wrong answer - correct is China
+    answer: "India" 
   },
   {
     question: "Which African country first gained independence?",
     options: ["Ghana", "Egypt", "Liberia", "South Africa"],
-    answer: "Ghana" // BUG 2: Wrong answer - correct is Liberia
-  },
-  {
-    question: "Who was the first President of Nigeria?",
-    options: ["Tafawa Balewa", "Nnamdi Azikiwe", "Yakubu Gowon", "Olusegun Obasanjo"],
-    answer: "Nnamdi Azikiwe"
-  },
-  {
-    question: "What is Nigeria's official language?",
-    options: ["French", "Yoruba", "Hausa", "English"],
-    answer: "English"
+    answer: "Liberia"
   }
 ];
 
-let score = 0;
-let currentQuestionIndex = 0;
-let timerInterval;
-let highScores = [];
+// State Management
+let state = {
+  score: 0,
+  index: 0,
+  timer: null,
+  highScores: []
+};
 
-// BUG 3: JSON.parse with no try/catch - crashes if localStorage data is corrupted
-const savedData = localStorage.getItem('quizData');
-if (savedData) {
-  highScores = JSON.parse(savedData);
+// Initialize App
+function init() {
+  try {
+    const saved = localStorage.getItem('quiz_data');
+    // NEW BUG A: Short-circuit logic error. If 'saved' exists, it overwrites with empty array.
+    state.highScores = saved || JSON.parse(saved) || [];
+  } catch (e) {
+    state.highScores = [];
+  }
+  
+  attachListeners();
 }
 
-// BUG 4: No validation that parsed data is actually an array
-score = Number(localStorage.getItem('score')) || 0;
+function attachListeners() {
+  const loadBtn = document.getElementById("load-question");
+  const restartBtn = document.getElementById("restart-game");
 
-const questionTitle = document.getElementById("question-title");
-const questionText = document.getElementById("question-text");
-const answersContainer = document.querySelector(".answers");
-const loadQuestionButton = document.getElementById("load-question");
-const questionContainer = document.getElementById("question-container");
-const gameOverContainer = document.getElementById("game-over");
-const finalScore = document.getElementById("final-score");
-const restartButton = document.getElementById("restart-game");
-
-// BUG 5: No null checks - if any element above doesn't exist, all subsequent code crashes
-if (!questionTitle || !questionText || !answersContainer) {
-  console.error("Required DOM elements not found");
-  // BUG 6: logs the error but doesn't stop execution - code continues and crashes anyway
+  if (loadBtn) loadBtn.addEventListener("click", loadQuestion);
+  if (restartBtn) restartBtn.addEventListener("click", restartGame);
 }
 
 function startTimer() {
-  clearInterval(timerInterval);
   let timeLeft = 30;
-  timerInterval = setInterval(() => {
+  const timerEl = document.getElementById("timer");
+  
+  state.timer = setInterval(() => {
     timeLeft--;
-    const timerEl = document.getElementById("timer");
-    // BUG 7: no null check on timerEl - crashes if timer element doesn't exist in HTML
-    timerEl.textContent = `Time left: ${timeLeft}s`;
+    if (timerEl) timerEl.textContent = `Time left: ${timeLeft}s`;
 
     if (timeLeft <= 0) {
-      clearInterval(timerInterval);
-      // BUG 8: skipQuestion() is not defined anywhere - ReferenceError crashes the app
-      skipQuestion();
+      clearInterval(state.timer);
+      handleAnswer(null); // Timeout case
     }
   }, 1000);
 }
 
 function loadQuestion() {
-  const questionNumberInput = document.getElementById("question-number").value;
-  const questionNumber = parseInt(questionNumberInput, 10);
+  const input = document.getElementById("question-number");
+  const val = parseInt(input?.value);
 
-  if (isNaN(questionNumber) || questionNumber < 1 || questionNumber > questions.length) {
-    alert("Please enter a valid question number.");
-    return;
+  if (val > 0 && val <= questions.length) {
+    state.index = val - 1;
+    showQuestion();
   }
-
-  currentQuestionIndex = questionNumber - 1;
-  showQuestion();
 }
 
 function showQuestion() {
-  if (currentQuestionIndex >= questions.length) {
-    endGame();
-    return;
-  }
+  const q = questions[state.index];
+  const container = document.getElementById("question-container");
+  const textEl = document.getElementById("question-text");
+  const answersWrap = document.querySelector(".answers");
 
+  if (!q || !container) return;
+
+  clearInterval(state.timer);
   startTimer();
 
-  const currentQuestion = questions[currentQuestionIndex];
-  questionTitle.innerText = `Question ${currentQuestionIndex + 1}`;
-  questionText.innerText = currentQuestion.question;
+  textEl.innerText = q.question;
+  answersWrap.innerHTML = "";
 
-  answersContainer.innerHTML = '';
-  currentQuestion.options.forEach(option => {
-    const button = document.createElement("button");
-    button.textContent = option;
-    button.addEventListener("click", () => handleAnswer(option, currentQuestion));
-    answersContainer.appendChild(button);
+  q.options.forEach(opt => {
+    const btn = document.createElement("button");
+    btn.className = "answer-btn";
+    btn.textContent = opt;
+    // NEW BUG B: The "this" context. Arrow functions don't have their own 'this'.
+    // If the CSS relies on 'this.classList', this will fail.
+    btn.addEventListener("click", () => handleAnswer(opt));
+    answersWrap.appendChild(btn);
   });
 
-  questionContainer.classList.remove("hide");
+  container.classList.remove("hide");
 }
 
-function handleAnswer(selectedAnswer, currentQuestion) {
-  const userAnswer = selectedAnswer.trim().toLowerCase();
-  const correct = currentQuestion.answer.trim().toLowerCase();
-
-  clearInterval(timerInterval);
-
-  const buttons = answersContainer.querySelectorAll("button");
-  buttons.forEach(button => {
-    const answerText = button.innerText.trim().toLowerCase();
-    button.disabled = true;
-    if (answerText === correct) button.classList.add("correct");
-    if (answerText === userAnswer && answerText !== correct) button.classList.add("wrong");
-  });
-
-  if (userAnswer === correct) {
-    score += 1000;
+function handleAnswer(selected) {
+  clearInterval(state.timer);
+  const currentQ = questions[state.index];
+  
+  // NEW BUG C: Strict equality check on types. 
+  // If the answer is a number (e.g., "2024") and selected is a string, this returns false.
+  if (selected === currentQ.answer) {
+    state.score += 1000;
   }
 
-  try {
-    localStorage.setItem('score', score);
-    localStorage.setItem('quizData', JSON.stringify(highScores));
-  } catch (e) {
-    console.warn('localStorage not available:', e);
-  }
-
-  // BUG 9: no setTimeout delay - moves to next question instantly
-  // user cannot see which answer was correct or wrong
-  currentQuestionIndex++;
-  showQuestion();
+  // NEW BUG D: Off-by-one error in progression.
+  // The increment happens before the "end game" check in the next cycle.
+  state.index++; 
+  
+  setTimeout(() => {
+    if (state.index >= questions.length) {
+      endGame();
+    } else {
+      showQuestion();
+    }
+  }, 1500);
 }
 
 function endGame() {
-  highScores.push(score);
+  const gameOver = document.getElementById("game-over");
+  const finalScore = document.getElementById("final-score");
+  
+  // Update High Scores
+  state.highScores.push(state.score);
+  state.highScores.sort((a, b) => b - a);
+  
+  localStorage.setItem('quiz_data', JSON.stringify(state.highScores));
 
-  // BUG 10: cap logic is inverted - drops newest scores, keeps oldest
-  if (highScores.length > 5) {
-    highScores = highScores.slice(highScores.length - 5);
-  }
-
-  // BUG 11: highScores not sorted - highest score is never actually shown first
-  const bestScore = highScores[0];
-
-  try {
-    localStorage.setItem('quizData', JSON.stringify(highScores));
-  } catch (e) {
-    console.warn('localStorage not available:', e);
-  }
-
-  finalScore.innerText = score;
-  // BUG 12: best score never displayed to user even though it was calculated
-  gameOverContainer.classList.remove("hide");
-  questionContainer.classList.add("hide");
-  clearInterval(timerInterval);
+  if (finalScore) finalScore.innerText = state.score;
+  gameOver?.classList.remove("hide");
 }
 
 function restartGame() {
-  score = 0;
-  currentQuestionIndex = 0;
-  clearInterval(timerInterval);
-  gameOverContainer.classList.add("hide");
-  questionContainer.classList.add("hide");
-  document.getElementById("question-number").value = '';
-
-  // BUG 13: score reset in memory but old score not cleared from localStorage
-  // next page load restores the old score silently
-  
-  // BUG 14: highScores array not reset - keeps growing across restarts with no limit
+  // NEW BUG E: Incomplete State Reset.
+  // We reset index and score, but the UI elements from the previous game aren't cleared.
+  state.score = 0;
+  state.index = 0;
+  document.getElementById("game-over")?.classList.add("hide");
+  loadQuestion(); 
 }
 
-// BUG 15: event listeners added but never removed
-// if restartGame() is called multiple times, duplicate listeners stack up
-loadQuestionButton.addEventListener("click", loadQuestion);
-restartButton.addEventListener("click", restartGame);
+init();
