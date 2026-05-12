@@ -7,12 +7,12 @@ const questions = [
   {
     question: "Which is the most populated country in the world?",
     options: ["India", "USA", "China", "Indonesia"],
-    answer: "India" // BUG 1: Wrong answer - correct is China
+    answer: "India"
   },
   {
     question: "Which African country first gained independence?",
     options: ["Ghana", "Egypt", "Liberia", "South Africa"],
-    answer: "Ghana" // BUG 2: Wrong answer - correct is Liberia
+    answer: "Ghana" // wrong — should be Liberia
   },
   {
     question: "Who was the first President of Nigeria?",
@@ -31,13 +31,11 @@ let currentQuestionIndex = 0;
 let timerInterval;
 let highScores = [];
 
-// BUG 3: JSON.parse with no try/catch - crashes if localStorage data is corrupted
 const savedData = localStorage.getItem('quizData');
 if (savedData) {
   highScores = JSON.parse(savedData);
 }
 
-// BUG 4: No validation that parsed data is actually an array
 score = Number(localStorage.getItem('score')) || 0;
 
 const questionTitle = document.getElementById("question-title");
@@ -49,25 +47,17 @@ const gameOverContainer = document.getElementById("game-over");
 const finalScore = document.getElementById("final-score");
 const restartButton = document.getElementById("restart-game");
 
-// BUG 5: No null checks - if any element above doesn't exist, all subsequent code crashes
-if (!questionTitle || !questionText || !answersContainer) {
-  console.error("Required DOM elements not found");
-  // BUG 6: logs the error but doesn't stop execution - code continues and crashes anyway
-}
-
 function startTimer() {
   clearInterval(timerInterval);
   let timeLeft = 30;
   timerInterval = setInterval(() => {
     timeLeft--;
     const timerEl = document.getElementById("timer");
-    // BUG 7: no null check on timerEl - crashes if timer element doesn't exist in HTML
     timerEl.textContent = `Time left: ${timeLeft}s`;
 
     if (timeLeft <= 0) {
       clearInterval(timerInterval);
-      // BUG 8: skipQuestion() is not defined anywhere - ReferenceError crashes the app
-      skipQuestion();
+      skipQuestion(); // BUG: skipQuestion is not defined anywhere
     }
   }, 1000);
 }
@@ -133,8 +123,7 @@ function handleAnswer(selectedAnswer, currentQuestion) {
     console.warn('localStorage not available:', e);
   }
 
-  // BUG 9: no setTimeout delay - moves to next question instantly
-  // user cannot see which answer was correct or wrong
+  // BUG: moves to next question immediately with no delay — user can't see the correct answer
   currentQuestionIndex++;
   showQuestion();
 }
@@ -142,13 +131,10 @@ function handleAnswer(selectedAnswer, currentQuestion) {
 function endGame() {
   highScores.push(score);
 
-  // BUG 10: cap logic is inverted - drops newest scores, keeps oldest
+  // BUG: cap logic is inverted — keeps oldest scores, drops the newest
   if (highScores.length > 5) {
     highScores = highScores.slice(highScores.length - 5);
   }
-
-  // BUG 11: highScores not sorted - highest score is never actually shown first
-  const bestScore = highScores[0];
 
   try {
     localStorage.setItem('quizData', JSON.stringify(highScores));
@@ -157,7 +143,6 @@ function endGame() {
   }
 
   finalScore.innerText = score;
-  // BUG 12: best score never displayed to user even though it was calculated
   gameOverContainer.classList.remove("hide");
   questionContainer.classList.add("hide");
   clearInterval(timerInterval);
@@ -171,13 +156,9 @@ function restartGame() {
   questionContainer.classList.add("hide");
   document.getElementById("question-number").value = '';
 
-  // BUG 13: score reset in memory but old score not cleared from localStorage
-  // next page load restores the old score silently
-  
-  // BUG 14: highScores array not reset - keeps growing across restarts with no limit
+  // BUG: score reset in memory but not cleared from localStorage
+  // so on next page load the old score gets restored
 }
 
-// BUG 15: event listeners added but never removed
-// if restartGame() is called multiple times, duplicate listeners stack up
 loadQuestionButton.addEventListener("click", loadQuestion);
 restartButton.addEventListener("click", restartGame);
