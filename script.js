@@ -1,55 +1,63 @@
 const questions = [
   {
-    question: "Who is Nigeria's current Chief Justice?",
-    options: ["Walter Onnoghen", "Tanko Muhammad", "Olukayode Ariwoola", "Ibrahim Tanko"],
-    answer: "Olukayode Ariwoola"
+    question: "What is the capital of Lagos State?",
+    options: ["Ikeja", "Victoria Island", "Lekki", "Surulere"],
+    answer: "Ikeja"
   },
   {
-    question: "Which is the most populated country in the world?",
-    options: ["India", "USA", "China", "Indonesia"],
-    answer: "India"
+    question: "Which year did Nigeria gain independence?",
+    options: ["1957", "1960", "1963", "1965"],
+    answer: "1960"
   },
   {
-    question: "What is the capital of Nigeria?",
-    options: ["Lagos", "Abuja", "Kano", "Ibadan"],
-    answer: "Abuja"
+    question: "What is the powerhouse of the cell?",
+    options: ["Nucleus", "Ribosome", "Mitochondria", "Golgi apparatus"],
+    answer: "Mitochondria"
   },
   {
-    question: "Which planet is closest to the Sun?",
-    options: ["Venus", "Earth", "Mercury", "Mars"],
-    answer: "Mercury"
+    question: "Which programming language runs in the browser natively?",
+    options: ["Python", "Java", "JavaScript", "Ruby"],
+    answer: "JavaScript"
   },
   {
-    question: "How many states does Nigeria have?",
-    options: ["30", "36", "42", "24"],
-    answer: "36"
+    question: "What does HTTP stand for?",
+    options: [
+      "HyperText Transfer Protocol",
+      "High Transfer Text Protocol",
+      "HyperText Transmission Process",
+      "Hosted Text Transfer Protocol"
+    ],
+    answer: "HyperText Transfer Protocol"
   }
 ];
 
-let score = 0;
 let currentIndex = 0;
-let answered = false; // NEW BUG 1: `answered` flag is checked but never reset between questions,
-                      // so after the first answer, all subsequent questions become unclickable.
+let score = 0;
+let answered = false; // BUG 1: Never reset between questions — after first answer, all buttons stop working
 
 function init() {
-  // FIX for original BUG 1: Remove existing listeners before adding new ones
   const loadBtn = document.getElementById("load-question");
   const restartBtn = document.getElementById("restart-game");
+
+  // Prevent duplicate listeners on re-init
   loadBtn.replaceWith(loadBtn.cloneNode(true));
   restartBtn.replaceWith(restartBtn.cloneNode(true));
+
   document.getElementById("load-question").addEventListener("click", loadQuestion);
   document.getElementById("restart-game").addEventListener("click", resetQuiz);
 }
 
 function loadQuestion() {
-  const num = parseInt(document.getElementById("question-number").value);
-  // FIX for original BUG 2: Validate that num is >= 1 AND <= questions.length
-  if (num >= 1 && num <= questions.length) {
-    currentIndex = num - 1;
-    render();
-  } else {
-    alert("Please enter a valid question number.");
+  const raw = document.getElementById("question-number").value;
+  const num = parseInt(raw);
+
+  if (isNaN(num) || num < 1 || num > questions.length) {
+    alert(`Please enter a number between 1 and ${questions.length}.`);
+    return;
   }
+
+  currentIndex = num - 1;
+  render();
 }
 
 function render() {
@@ -59,37 +67,30 @@ function render() {
   document.getElementById("question-text").innerText = q.question;
   wrap.innerHTML = "";
 
-  // FIX for original BUG 3: Each render clears the container (wrap.innerHTML = "")
-  // so old buttons and their listeners are fully removed before new ones are added.
+  updateProgressBar();
+
   q.options.forEach(opt => {
     const btn = document.createElement("button");
     btn.innerText = opt;
     btn.onclick = () => {
-      // NEW BUG 1 (see above): `answered` is never reset, so this blocks all future clicks
-      if (answered) return;
+      if (answered) return; // BUG 1 bites here — never resets so this always returns after Q1
       answered = true;
       checkAnswer(opt);
     };
     wrap.appendChild(btn);
   });
-
-  updateProgressBar(); // NEW BUG 2: Function is called but defined to use 1-based index,
-                       // causing the bar to always show one step behind the current question.
 }
 
 function checkAnswer(selected) {
-  // FIX for original BUG 4: Case-insensitive comparison using .toLowerCase()
-  if (selected.toLowerCase() === questions[currentIndex].answer.toLowerCase()) {
+  const correct = questions[currentIndex].answer;
+
+  // Case-insensitive comparison
+  if (selected.trim().toLowerCase() === correct.trim().toLowerCase()) {
     score += 1000;
   }
 
-  // FIX for original BUG 5: Guard added — questions.length === 0 is handled before render/recursion
-  if (questions.length === 0) {
-    showResults();
-    return;
-  }
-
   currentIndex++;
+
   if (currentIndex < questions.length) {
     render();
   } else {
@@ -98,21 +99,21 @@ function checkAnswer(selected) {
 }
 
 function showResults() {
-  // NEW BUG 3: score is displayed correctly, but `totalPossible` is calculated AFTER
-  // showResults is called, so it always reflects a stale (pre-final) value.
   const totalPossible = questions.length * 1000;
+
+  // BUG 2: Division produces NaN when totalPossible is 0 (empty questions array)
+  // No guard clause here
   const percentage = (score / totalPossible) * 100;
 
   document.getElementById("final-score").innerText = score;
-  document.getElementById("score-percentage").innerText = percentage.toFixed(2) + "%"; // may be NaN if totalPossible is 0
+  document.getElementById("score-percentage").innerText = percentage.toFixed(2) + "%";
   document.getElementById("game-over").classList.remove("hide");
 }
 
 function updateProgressBar() {
-  // NEW BUG 2: Uses `currentIndex + 1` but render() calls this before incrementing,
-  // so the bar shows e.g. "1/5" on question 1 correctly, but visually updates one tick late
-  // because the bar width formula divides by questions.length instead of questions.length - 1.
-  const progress = ((currentIndex + 1) / questions.length) * 100;
+  // BUG 3: Divides by questions.length instead of questions.length - 1
+  // Progress bar hits 100% one question too early (on the second-to-last question)
+  const progress = (currentIndex / questions.length) * 100;
   const bar = document.getElementById("progress-bar");
   if (bar) bar.style.width = progress + "%";
 }
@@ -120,23 +121,29 @@ function updateProgressBar() {
 function resetQuiz() {
   score = 0;
   currentIndex = 0;
-  // NEW BUG 4: `answered` flag is NOT reset here, so after the game ends and the user
-  // clicks Restart, all answer buttons are immediately unclickable again.
+  // BUG 1 consequence: answered is not reset here, so restarting the game
+  // leaves all buttons permanently disabled
   document.getElementById("game-over").classList.add("hide");
   render();
 }
 
-function getHighScore() {
-  // NEW BUG 5: localStorage.getItem returns a string, but it's compared with `>` against
-  // a number. "900" > 1000 evaluates as string comparison ("9" > "1" = true), so a
-  // previous high score of 900 would incorrectly beat a new score of 1000.
+function saveHighScore() {
+  // BUG 4: localStorage returns strings — "900" > 1000 is true due to
+  // JS coercing to string comparison, so stale high scores can never be beaten
   const stored = localStorage.getItem("highScore");
   if (stored > score) {
     return parseInt(stored);
-  } else {
-    localStorage.setItem("highScore", score);
-    return score;
   }
+  localStorage.setItem("highScore", score);
+  return score;
+}
+
+function formatTime(seconds) {
+  // BUG 5: Pads minutes correctly but uses wrong variable for seconds display
+  // Should be seconds % 60 but uses raw `seconds`, so "1:75" instead of "1:15"
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds; // should be: seconds % 60
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
 init();
