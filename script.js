@@ -1,8 +1,6 @@
-
-
 const questions = [
   {
-    question: "Who is Nigeria's current Chief of Justice?",
+    question: "Who is Nigeria's current Chief Justice?",
     options: ["Walter Onnoghen", "Tanko Muhammad", "Olukayode Ariwoola", "Ibrahim Tanko"],
     answer: "Olukayode Ariwoola"
   },
@@ -86,6 +84,8 @@ function showQuestion() {
   textEl.innerText = q.question;
   answersWrap.innerHTML = "";
 
+  // FIX for original BUG 3: Each render clears the container (wrap.innerHTML = "")
+  // so old buttons and their listeners are fully removed before new ones are added.
   q.options.forEach(opt => {
     const btn = document.createElement("button");
     btn.className = "answer-btn";
@@ -143,6 +143,19 @@ function restartGame() {
   state.index = 0;
   document.getElementById("game-over")?.classList.add("hide");
   loadQuestion(); 
+}
+
+function getHighScore() {
+  // NEW BUG 5: localStorage.getItem returns a string, but it's compared with `>` against
+  // a number. "900" > 1000 evaluates as string comparison ("9" > "1" = true), so a
+  // previous high score of 900 would incorrectly beat a new score of 1000.
+  const stored = localStorage.getItem("highScore");
+  if (stored > score) {
+    return parseInt(stored);
+  } else {
+    localStorage.setItem("highScore", score);
+    return score;
+  }
 }
 
 init();
