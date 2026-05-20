@@ -7,123 +7,142 @@ const questions = [
   {
     question: "Which is the most populated country in the world?",
     options: ["India", "USA", "China", "Indonesia"],
-    answer: "India"
+    answer: "India" 
   },
   {
-    question: "What is the capital of Nigeria?",
-    options: ["Lagos", "Abuja", "Kano", "Ibadan"],
-    answer: "Abuja"
-  },
-  {
-    question: "Which planet is closest to the Sun?",
-    options: ["Venus", "Earth", "Mercury", "Mars"],
-    answer: "Mercury"
-  },
-  {
-    question: "How many states does Nigeria have?",
-    options: ["30", "36", "42", "24"],
-    answer: "36"
+    question: "Which African country first gained independence?",
+    options: ["Ghana", "Egypt", "Liberia", "South Africa"],
+    answer: "Liberia"
   }
 ];
 
-let score = 0;
-let currentIndex = 0;
-let answered = false; // NEW BUG 1: `answered` flag is checked but never reset between questions,
-                      // so after the first answer, all subsequent questions become unclickable.
+// State Management
+let state = {
+  score: 0,
+  index: 0,
+  timer: null,
+  highScores: []
+};
 
+// Initialize App
 function init() {
-  // FIX for original BUG 1: Remove existing listeners before adding new ones
+  try {
+    const saved = localStorage.getItem('quiz_data');
+    // NEW BUG A: Short-circuit logic error. If 'saved' exists, it overwrites with empty array.
+    state.highScores = saved || JSON.parse(saved) || [];
+  } catch (e) {
+    state.highScores = [];
+  }
+  
+  attachListeners();
+}
+
+function attachListeners() {
   const loadBtn = document.getElementById("load-question");
   const restartBtn = document.getElementById("restart-game");
-  loadBtn.replaceWith(loadBtn.cloneNode(true));
-  restartBtn.replaceWith(restartBtn.cloneNode(true));
-  document.getElementById("load-question").addEventListener("click", loadQuestion);
-  document.getElementById("restart-game").addEventListener("click", resetQuiz);
+
+  if (loadBtn) loadBtn.addEventListener("click", loadQuestion);
+  if (restartBtn) restartBtn.addEventListener("click", restartGame);
+}
+
+function startTimer() {
+  let timeLeft = 30;
+  const timerEl = document.getElementById("timer");
+  
+  state.timer = setInterval(() => {
+    timeLeft--;
+    if (timerEl) timerEl.textContent = `Time left: ${timeLeft}s`;
+
+    if (timeLeft <= 0) {
+      clearInterval(state.timer);
+      handleAnswer(null); // Timeout case
+    }
+  }, 1000);
 }
 
 function loadQuestion() {
-  const num = parseInt(document.getElementById("question-number").value);
-  // FIX for original BUG 2: Validate that num is >= 1 AND <= questions.length
-  if (num >= 1 && num <= questions.length) {
-    currentIndex = num - 1;
-    render();
-  } else {
-    alert("Please enter a valid question number.");
+  const input = document.getElementById("question-number");
+  const val = parseInt(input?.value);
+
+  if (val > 0 && val <= questions.length) {
+    state.index = val - 1;
+    showQuestion();
   }
 }
 
-function render() {
-  const q = questions[currentIndex];
-  const wrap = document.querySelector(".answers");
+function showQuestion() {
+  const q = questions[state.index];
+  const container = document.getElementById("question-container");
+  const textEl = document.getElementById("question-text");
+  const answersWrap = document.querySelector(".answers");
 
-  document.getElementById("question-text").innerText = q.question;
-  wrap.innerHTML = "";
+  if (!q || !container) return;
+
+  clearInterval(state.timer);
+  startTimer();
+
+  textEl.innerText = q.question;
+  answersWrap.innerHTML = "";
 
   // FIX for original BUG 3: Each render clears the container (wrap.innerHTML = "")
   // so old buttons and their listeners are fully removed before new ones are added.
   q.options.forEach(opt => {
     const btn = document.createElement("button");
-    btn.innerText = opt;
-    btn.onclick = () => {
-      // NEW BUG 1 (see above): `answered` is never reset, so this blocks all future clicks
-      if (answered) return;
-      answered = true;
-      checkAnswer(opt);
-    };
-    wrap.appendChild(btn);
+    btn.className = "answer-btn";
+    btn.textContent = opt;
+    // NEW BUG B: The "this" context. Arrow functions don't have their own 'this'.
+    // If the CSS relies on 'this.classList', this will fail.
+    btn.addEventListener("click", () => handleAnswer(opt));
+    answersWrap.appendChild(btn);
   });
 
-  updateProgressBar(); // NEW BUG 2: Function is called but defined to use 1-based index,
-                       // causing the bar to always show one step behind the current question.
+  container.classList.remove("hide");
 }
 
-function checkAnswer(selected) {
-  // FIX for original BUG 4: Case-insensitive comparison using .toLowerCase()
-  if (selected.toLowerCase() === questions[currentIndex].answer.toLowerCase()) {
-    score += 1000;
+function handleAnswer(selected) {
+  clearInterval(state.timer);
+  const currentQ = questions[state.index];
+  
+  // NEW BUG C: Strict equality check on types. 
+  // If the answer is a number (e.g., "2024") and selected is a string, this returns false.
+  if (selected === currentQ.answer) {
+    state.score += 1000;
   }
 
-  // FIX for original BUG 5: Guard added — questions.length === 0 is handled before render/recursion
-  if (questions.length === 0) {
-    showResults();
-    return;
-  }
-
-  currentIndex++;
-  if (currentIndex < questions.length) {
-    render();
-  } else {
-    showResults();
-  }
+  // NEW BUG D: Off-by-one error in progression.
+  // The increment happens before the "end game" check in the next cycle.
+  state.index++; 
+  
+  setTimeout(() => {
+    if (state.index >= questions.length) {
+      endGame();
+    } else {
+      showQuestion();
+    }
+  }, 1500);
 }
 
-function showResults() {
-  // NEW BUG 3: score is displayed correctly, but `totalPossible` is calculated AFTER
-  // showResults is called, so it always reflects a stale (pre-final) value.
-  const totalPossible = questions.length * 1000;
-  const percentage = (score / totalPossible) * 100;
+function endGame() {
+  const gameOver = document.getElementById("game-over");
+  const finalScore = document.getElementById("final-score");
+  
+  // Update High Scores
+  state.highScores.push(state.score);
+  state.highScores.sort((a, b) => b - a);
+  
+  localStorage.setItem('quiz_data', JSON.stringify(state.highScores));
 
-  document.getElementById("final-score").innerText = score;
-  document.getElementById("score-percentage").innerText = percentage.toFixed(2) + "%"; // may be NaN if totalPossible is 0
-  document.getElementById("game-over").classList.remove("hide");
+  if (finalScore) finalScore.innerText = state.score;
+  gameOver?.classList.remove("hide");
 }
 
-function updateProgressBar() {
-  // NEW BUG 2: Uses `currentIndex + 1` but render() calls this before incrementing,
-  // so the bar shows e.g. "1/5" on question 1 correctly, but visually updates one tick late
-  // because the bar width formula divides by questions.length instead of questions.length - 1.
-  const progress = ((currentIndex + 1) / questions.length) * 100;
-  const bar = document.getElementById("progress-bar");
-  if (bar) bar.style.width = progress + "%";
-}
-
-function resetQuiz() {
-  score = 0;
-  currentIndex = 0;
-  // NEW BUG 4: `answered` flag is NOT reset here, so after the game ends and the user
-  // clicks Restart, all answer buttons are immediately unclickable again.
-  document.getElementById("game-over").classList.add("hide");
-  render();
+function restartGame() {
+  // NEW BUG E: Incomplete State Reset.
+  // We reset index and score, but the UI elements from the previous game aren't cleared.
+  state.score = 0;
+  state.index = 0;
+  document.getElementById("game-over")?.classList.add("hide");
+  loadQuestion(); 
 }
 
 function getHighScore() {
